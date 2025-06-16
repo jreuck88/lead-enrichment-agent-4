@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import re
 
+# Load environment variables
 load_dotenv()
 app = Flask(__name__)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -16,7 +17,7 @@ SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 CREDS_FILE = "/etc/secrets/service_account.json"
 SPREADSHEET_ID = "1thZnhvqC_rZZH4Ixa7a2PoXnuq8gnwXBJGxsqjUk3KU"
 SHEET_NAME = "Agent"
-HEADER_ROW_INDEX = 1  # Header is in row 1; data starts row 2
+HEADER_ROW_INDEX = 1  # Row 1 is header
 
 def get_sheet():
     print("📂 Debug: Listing /etc/secrets contents...")
@@ -56,37 +57,32 @@ def score_lead(company_data):
 def index():
     return "✅ Lead Enrichment Agent is running"
 
-@app.route("/enrich", methods=["GET", "POST"])
-def enrich():
-    sheet = get_sheet()
-    rows = sheet.get_all_values()[HEADER_ROW_INDEX:]
-    headers = sheet.row_values(HEADER_ROW_INDEX)
-
-    for idx, row in enumerate(rows, start=HEADER_ROW_INDEX + 1):
-        try:
-            if not row or len(row) < 16 or row[15].strip():
-                continue  # Already enriched
-
-            sheet.format(f"A{idx}:P{idx}", {"backgroundColor": {"red": 1, "green": 1, "blue": 0}})  # highlight yellow
-
-            company_data = parse_company_data(row)
-            score = score_lead(company_data)
-
-            sheet.update_cell(idx, 16, str(score))  # column P: Lead Score (1–100)
-            sheet.update_cell(idx, 17, "1")         # column Q: Enriched leads
-        except Exception as e:
-            sheet.update_cell(idx, 17, f"error: {e}")
-            continue
-
-    return jsonify({"status": "success", "timestamp": str(datetime.utcnow())})
-
-@app.route("/debug-secrets")
+@app.route("/debug-secrets", methods=["GET"])
 def debug_secrets():
     try:
         files = os.listdir("/etc/secrets")
         return jsonify({"files": files})
     except Exception as e:
         return jsonify({"error": str(e)})
+
+@app.route("/enrich", methods=["POST"])
+def enrich():
+    try:
+        sheet = get_sheet()
+        rows = sheet.get_all_values()[HEADER_ROW_INDEX:]
+        headers = sheet.row_values(HEADER_ROW_INDEX)
+
+        for idx, row in enumerate(rows, start=HEADER_ROW_INDEX + 1):
+            if not row or len(row) < 16 or row[15].strip():
+                continue  # Already enriched
+            sheet.format(f"A{idx}:P{idx}", {"backgroundColor": {"red": 1, "green": 1, "blue": 0}})
+            company_data = parse_company_data(row)
+            score = score_lead(company_data)
+            sheet.update_cell(idx, 16, str(score))  # column P
+            sheet.update_cell(idx, 17, "1")         # column Q
+        return jsonify({"status": "success", "timestamp": str(datetime.utcnow())})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
