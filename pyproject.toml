@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "lead-enrichment-agent-4"
+version = "0.1.0"
+description = "AI-powered lead enrichment tool for Google Sheets"
+authors = ["Josh Reuck <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+flask = "^2.3.2"
+gunicorn = "^21.2.0"
+openai = "^1.0.0"
+gspread = "^6.0.0"
+oauth2client = "^4.1.3"
+python-dotenv = "^1.0.0"
+serpapi = "^0.1.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
