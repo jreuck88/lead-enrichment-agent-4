@@ -81,5 +81,13 @@ def enrich():
 
     return jsonify({"status": "success", "timestamp": str(datetime.utcnow())})
 
+@app.route("/debug-secrets")
+def debug_secrets():
+    try:
+        files = os.listdir("/etc/secrets")
+        return jsonify({"files": files})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
 if __name__ == "__main__":
     app.run(debug=True)
