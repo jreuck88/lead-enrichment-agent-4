@@ -19,6 +19,12 @@ SHEET_NAME = "Agent"
 HEADER_ROW_INDEX = 1  # Header is in row 1; data starts row 2
 
 def get_sheet():
+    print("📂 Debug: Listing /etc/secrets contents...")
+    try:
+        print(os.listdir("/etc/secrets"))
+    except Exception as e:
+        print(f"❌ Could not list /etc/secrets: {e}")
+
     creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, SCOPE)
     gc = gspread.authorize(creds)
     return gc.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
