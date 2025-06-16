@@ -9,35 +9,48 @@ from openai import OpenAI
 app = Flask(__name__)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Google Sheets setup
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 CREDS_FILE = "/etc/secrets/service_account.json"
-SPREADSHEET_ID = "your-spreadsheet-id-here"
+SPREADSHEET_ID = "1thZnhvqC_rZZH4Ixa7a2PoXnuq8gnWXBJGxsqjUk3KU"
 SHEET_NAME = "Agent"
-HEADER_ROW_INDEX = 1  # headers on row 1, data starts on row 2
+HEADER_ROW_INDEX = 1  # data starts at row 2
 
 def get_sheet():
     creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, SCOPE)
     gc = gspread.authorize(creds)
     return gc.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
 
-def enrich_row(prompt):
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a professional research assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3
-        )
-        content = response.choices[0].message.content.strip()
-        if content.startswith("```json"):
-            content = content.split("```json")[-1].strip("`\n ")
-        elif content.startswith("```"):
-            content = content.strip("`\n ")
-        return json.loads(content)
-    except Exception as e:
-        return {"error": str(e)}
+def score_lead(row):
+    score = 0
+
+    services = row.get("Company Services", "").lower()
+    value_prop = row.get("Value Prop / Why a good fit", "").lower()
+    size = row.get("CompanySize", "").lower()
+    revenue = row.get("Annual Revenue", "").lower()
+    notes = row.get("Notes", "").lower()
+
+    # High-priority traits
+    if any(kw in services for kw in ["outdoor", "sustainab", "adventure", "creative"]):
+        score += 25
+    if "photograph" in value_prop:
+        score += 15
+    if "campaign" in value_prop or "story" in value_prop:
+        score += 15
+    if "worked with photographers" in notes or "has photographer" in notes:
+        score += 15
+    if any(kw in size for kw in ["mid", "50", "100"]) or any(kw in revenue for kw in ["500k", "1m", "2m"]):
+        score += 10
+    if "marketing" in services or "brand" in services:
+        score += 10
+
+    # Penalties
+    if any(kw in value_prop for kw in ["no marketing", "local org", "unclear"]):
+        score -= 20
+    if any(kw in services for kw in ["law", "fintech", "mlm", "coach", "realtor"]):
+        score = 0
+
+    return max(0, min(100, score))
 
 @app.route("/")
 def home():
@@ -53,40 +66,28 @@ def enrich():
 
         for i, row in enumerate(records):
             row_num = i + 2
-            if str(row.get("Enriched", "")).strip() == "1":
+            if str(row.get("Enriched leads: 0", "")).strip() == "1":
                 continue
 
-            company = row.get("Company Name", "")
-            location = row.get("Location", "")
-            website = row.get("Website", "")
+            print(f"🔍 Enriching row {row_num}: {row.get('Company Name', '')}")
 
-            prompt = f"""Enrich this company:
-Company: {company}
-Location: {location}
-Website: {website}
+            score = score_lead(row)
 
-Return JSON with these exact keys:
-Company Name, Company Email, Location, Best Point of Contact (POC) and their Role, Individual POC info / email, Individual POC LinkedIn URL, Company Instagram URL, Company LinkedIn URL, Website, Company Services, Value Prop / Why a good fit, Company size (# of employees), Annual Revenue, Lead Score (1-100)
-"""
+            # Highlight current row yellow
+            sheet.format(f"A{row_num}:P{row_num}", {"backgroundColor": {"red": 1, "green": 1, "blue": 0}})
 
-            enriched = enrich_row(prompt)
-            if "error" in enriched:
-                continue
-
-            for key, val in enriched.items():
-                if key in headers:
-                    col_index = headers.index(key) + 1
-                    sheet.update_cell(row_num, col_index, val)
-
-            sheet.update_cell(row_num, headers.index("Enriched") + 1, "1")
-            sheet.update_cell(row_num, headers.index("Date Added") + 1, datetime.now().strftime("%Y-%m-%d"))
+            # Update Lead Score + Enrichment status
+            sheet.update_cell(row_num, headers.index("Lead Score (1-100)") + 1, score)
+            sheet.update_cell(row_num, headers.index("Enriched leads: 0") + 1, "1")
+            sheet.update_cell(row_num, headers.index("Notes") + 1, row.get("Notes", "") + f" | Scored {score}")
 
             updated_count += 1
 
         return jsonify({"status": "done", "updated_rows": updated_count})
-
+    
     except Exception as e:
-        return jsonify({"error": f"Server error: {e}"}), 500
+        print("❌ Error:", e)
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
