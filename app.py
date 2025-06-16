@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import re
 
+
 # Load .env vars
 load_dotenv()
 
@@ -15,7 +16,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Config
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-CREDS_FILE = "/etc/secrets/service_account.json"
+CREDS_FILE = "service_account.json"
 SPREADSHEET_ID = "1thZnhvqC_rZZH4Ixa7a2PoXnuq8gnwXBJGxsqjUk3KU"
 SHEET_NAME = "Agent"
 HEADER_ROW_INDEX = 1  # row 1 = headers, data starts at row 2
