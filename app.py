@@ -24,7 +24,6 @@ def get_sheet():
         print(os.listdir("/etc/secrets"))
     except Exception as e:
         print(f"❌ Could not list /etc/secrets: {e}")
-
     creds = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, SCOPE)
     gc = gspread.authorize(creds)
     return gc.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
@@ -57,7 +56,7 @@ def score_lead(company_data):
 def index():
     return "✅ Lead Enrichment Agent is running"
 
-@app.route("/enrich", methods=["POST"])
+@app.route("/enrich", methods=["GET", "POST"])
 def enrich():
     sheet = get_sheet()
     rows = sheet.get_all_values()[HEADER_ROW_INDEX:]
@@ -73,7 +72,7 @@ def enrich():
             company_data = parse_company_data(row)
             score = score_lead(company_data)
 
-            sheet.update_cell(idx, 16, str(score))  # column P: Lead Score (1-100)
+            sheet.update_cell(idx, 16, str(score))  # column P: Lead Score (1–100)
             sheet.update_cell(idx, 17, "1")         # column Q: Enriched leads
         except Exception as e:
             sheet.update_cell(idx, 17, f"error: {e}")
